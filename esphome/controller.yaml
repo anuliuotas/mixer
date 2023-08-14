@@ -1,0 +1,141 @@
+substitutions:
+  device_name: "mixer-controller"
+  device_friendly_name: "Mixer controller"
+  mqqt_root_topic: "device"
+  mqqt_retain_message: "false"
+
+# ota:
+#   safe_mode: true
+#   password: !secret ota_password
+
+esphome:
+  name: ${device_name}
+  friendly_name: ${device_friendly_name}
+
+esp32:
+  board: nodemcu-32s
+
+logger:
+  level: INFO
+  baud_rate: 9600
+  logs:
+    canbus: INFO
+
+# wifi:
+#   networks:
+#   - ssid: !secret wifi_ssid_home
+#     password: !secret wifi_password_home
+#   - ssid: !secret wifi_ssid_makerspace
+#     password: !secret wifi_password_makerspace
+
+# captive_portal:
+
+# mqtt:
+#   broker: "192.168.0.208"
+#   discovery_object_id_generator: device_name
+#   topic_prefix: ${mqqt_root_topic}/${device_name}
+
+output:
+  - platform: ledc
+    pin: GPIO4
+    id: motor_pwm_out
+    frequency: 19531Hz
+
+globals:
+  - id: last_speed_sp_update_ms
+    type: long
+    initial_value: '0'
+    restore_value: no
+
+interval:      
+  - interval: 200ms
+    then:
+      - lambda: |-
+          // Update motor speed
+          long current_ms = millis();
+          
+          float setpoint_next = id(speed_esp_percent).state;
+          if (isnan(setpoint_next)) {
+            setpoint_next = 0;
+          }
+
+          //int can_delta_ms = current_ms - id(last_speed_sp_update_ms);
+          //if (can_delta_ms > 3000) {
+          //  setpoint_next = 0;
+          //}
+
+          id(motor_pwm_out).set_level(setpoint_next / 100.0);
+
+
+sensor:
+  - platform: template
+    id: speed_esp_percent
+    unit_of_measurement: "%"
+    force_update: true
+  - platform: template
+    id: temperature_material
+    unit_of_measurement: "°C"
+    force_update: true
+  - platform: template
+    id: temperature_motor
+    unit_of_measurement: "°C"
+    force_update: true
+  - platform: template
+    id: speed_vesc_rpm
+    unit_of_measurement: "RPM"
+    force_update: true
+
+
+canbus:
+  - platform: esp32_can
+    id: my_mcp2515
+    tx_pin: GPIO17
+    rx_pin: GPIO16
+    can_id: 0
+    use_extended_id: true
+    bit_rate: 125kbps
+    on_frame:
+    - can_id: 0x901
+      use_extended_id: true
+      then:
+      - lambda: |-
+          int32_t value = 0;
+          value = value | (0xFFFFFFFF & (x[0] << 24));
+          value = value | (0xFFFFFFFF & (x[1] << 16));
+          value = value | (0xFFFFFFFF & (x[2] << 8));
+          value = value | (0xFFFFFFFF & (x[3]));
+          
+          std::string b(x.begin(), x.end());
+
+          int speed_vesc = value / 7;
+          //ESP_LOGI("Received VESC actual speed: ", "%i", speed_vesc);
+
+          id(speed_vesc_rpm).publish_state(speed_vesc);
+    - can_id: 1
+      use_extended_id: true
+      then:
+      - lambda: |-                    
+          std::string b(x.begin(), x.end());
+          float value = *reinterpret_cast<float*>(&x[0]);
+
+          ESP_LOGI("Received speed setpoint value: ", "%f", value);
+          id(speed_esp_percent).publish_state(value);
+          id(last_speed_sp_update_ms) = millis();
+    - can_id: 10
+      use_extended_id: true
+      then:
+      - lambda: |-                    
+          std::string b(x.begin(), x.end());
+          float value = *reinterpret_cast<float*>(&x[0]);
+
+          //ESP_LOGI("Received motor temperature: ", "%f", value);
+          id(temperature_motor).publish_state(value);
+    - can_id: 11
+      use_extended_id: true
+      then:
+      - lambda: |-                    
+          std::string b(x.begin(), x.end());
+          float value = *reinterpret_cast<float*>(&x[0]);
+
+          //ESP_LOGI("Received material temperature: ", "%f", value);
+          id(temperature_material).publish_state(value);

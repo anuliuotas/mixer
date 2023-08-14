@@ -1,0 +1,323 @@
+substitutions:
+  device_name: "mixer-test"
+  device_friendly_name: "Mixer test"
+  mqqt_root_topic: "device"
+  mqqt_retain_message: "false"
+
+esphome:
+  name: ${device_name}
+  friendly_name: ${device_friendly_name}
+
+esp32:
+  board: nodemcu-32s
+
+logger:
+  level: DEBUG
+  baud_rate: 9600
+  logs:
+    canbus: INFO
+
+dallas:
+  - pin: GPIO19
+    id: hub_1
+    update_interval: 5s
+  - pin: GPIO21
+    id: hub_2
+    update_interval: 5s
+
+sensor:
+  - platform: dallas
+    dallas_id: hub_1
+    id: temp_motor
+    index: 0
+
+  - platform: dallas
+    dallas_id: hub_2
+    id: temp_material
+    index: 0
+
+  - platform: rotary_encoder
+    id: time_encoder
+    name: "Time encoder"
+    pin_a: GPIO35
+    pin_b: GPIO32
+    min_value: 0
+    max_value: 6000
+    restore_mode: ALWAYS_ZERO
+    resolution: 2
+    filters:
+      - multiply: 5
+      - lambda: |-
+          // If timer is ON, encoder value change is not allowed
+          if (id(timer_state).state) {
+            return {};
+          }
+          return x;
+  
+  - platform: rotary_encoder
+    id: speed_encoder
+    name: "Speed encoder"
+    pin_a: GPIO25
+    pin_b: GPIO26
+    min_value: 0
+    max_value: 100
+    restore_mode: ALWAYS_ZERO
+    resolution: 2
+    filters:
+      - multiply: 1
+
+binary_sensor:
+  - platform: gpio
+    id: time_encoder_sw
+    pin:
+      number: GPIO34
+      # mode:
+      #   input: true
+      #   pullup: true
+      inverted: true
+    on_press:
+      then:
+        - switch.toggle: timer_state
+    
+  - platform: gpio
+    id: speed_encoder_sw
+    pin:
+      number: GPIO33
+      mode:
+        input: true
+        pullup: true
+      inverted: true
+    on_press:
+      then:
+        - switch.toggle: motor_state
+
+switch:
+  - platform: template
+    id: motor_state
+    optimistic: true
+    restore_mode: ALWAYS_OFF
+  - platform: template
+    id: timer_state
+    optimistic: true
+    restore_mode: ALWAYS_OFF
+    turn_on_action:
+      - lambda: |-
+          id(timer_update_ms) = 0;
+
+
+globals:
+  - id: timer_counter_ms
+    type: long
+    initial_value: '0'
+    restore_value: no
+  - id: timer_update_ms
+    type: long
+    initial_value: '0'
+    restore_value: no
+  - id: text_blink
+    type: bool
+    restore_value: no
+  - id: speed_esp_rpm
+    type: float
+    initial_value: '0'
+    restore_value: no
+
+interval:
+  # - interval: 250ms
+  #   then:
+  #       - lambda: |-
+  #           // Text blink interval
+  #           id(text_blink) = !id(text_blink);
+
+  - interval: 100ms
+    then:
+      - lambda: |-
+          // Udate timer
+          if (id(timer_state).state) {
+            
+            // Update timer counter
+            long current_millis = millis();
+            long previous_timer_update_ms = id(timer_update_ms);
+
+            if (previous_timer_update_ms == 0) {
+              id(timer_update_ms) = current_millis;
+              return;
+            }
+
+            long delta_millis = current_millis - previous_timer_update_ms;
+            long updated_value = id(timer_counter_ms) + delta_millis;
+
+            id(timer_counter_ms) = updated_value;
+            id(timer_update_ms) = current_millis;
+
+            if (float(updated_value) / 1000 > id(time_encoder).state) {
+              // Timer has reach the setpoint
+              id(timer_state).turn_off();
+              id(motor_state).turn_off();
+
+              id(timer_counter_ms) = 0;
+              id(timer_update_ms) = 0;
+            }
+          } 
+          
+  - interval: 500ms
+    then:
+      - lambda: |-
+          //if (millis() < 0) {
+          //  return;
+          //}
+          // Send CAN bus message updating the speed setpoint
+
+          int setpoint_req = 0;
+          if (id(motor_state).state) {
+            if (!isnan(id(speed_encoder).state)) {
+              int speed_encoder_value = int(id(speed_encoder).state);
+              if (speed_encoder_value > 0) {
+                setpoint_req = int(speed_encoder_value);
+              } 
+            }
+          }
+
+          float value = float(setpoint_req);
+          std::vector<uint8_t> bytes(sizeof(float));
+          std::memcpy(&bytes[0], &value, sizeof(float));
+          id(my_mcp2515)->send_data(1, true, bytes);
+  - interval: 1000ms
+    then:
+      - lambda: |-
+          // Send CAN bus messages updating the states
+          if (millis() < 0) {
+            return;
+          }
+          std::vector<uint8_t> bytes(sizeof(float));
+          
+          if (!isnan(id(temp_motor).state)) {
+            std::memcpy(&bytes[0], &id(temp_motor).state, sizeof(float));
+            id(my_mcp2515)->send_data(10, true, bytes);
+          }
+
+          if (!isnan(id(temp_motor).state)) {
+            std::memcpy(&bytes[0], &id(temp_material).state, sizeof(float));
+            id(my_mcp2515)->send_data(11, true, bytes);
+          }
+
+canbus:
+  - platform: esp32_can
+    id: my_mcp2515
+    tx_pin: GPIO22
+    rx_pin: GPIO23
+    can_id: 0
+    use_extended_id: true
+    bit_rate: 125kbps
+    on_frame:
+    - can_id: 0x901
+    #- can_id: 0x0
+      use_extended_id: true
+      then:
+      - lambda: |-
+          unsigned char erpmvals[4];
+          erpmvals[0] = x[3];
+          erpmvals[1] = x[2];
+          erpmvals[2] = x[1];
+          erpmvals[3] = x[0];
+          long erpm = *(long *)erpmvals;
+                    
+          int32_t rpm = 0;
+          rpm = rpm | (0xFFFFFFFF & (x[0] << 24));
+          rpm = rpm | (0xFFFFFFFF & (x[1] << 16));
+          rpm = rpm | (0xFFFFFFFF & (x[2] << 8));
+          rpm = rpm | (0xFFFFFFFF & (x[3]));
+
+          //ESP_LOGI("can extended: ", "%i", rpm / 7);
+          
+          std::string b(x.begin(), x.end());
+          //ESP_LOGI("can extended id 0x901", "%s", &b[0] );
+          
+          id(speed_esp_rpm) = rpm / 7.0;
+
+
+spi:
+  clk_pin: GPIO16
+  mosi_pin: GPIO17
+
+font:
+  - file: "fonts/Courier New/cour.ttf"
+    id: text_font
+    size: 16
+  - file: "fonts/Courier New/cour.ttf"
+    id: text_small_font
+    size: 12
+  - file: "fonts/Courier New/cour_bold.ttf"
+    id: text_font_bold
+    size: 16
+    
+
+display:
+  - platform: ssd1322_spi
+    model: "SSD1322 256x64"
+    cs_pin: GPIO18
+    dc_pin: GPIO5
+    update_interval: 0.25s
+    lambda: |-
+      id(text_blink) = !id(text_blink);
+
+      float speed_encoder_val = id(speed_encoder).state;
+      if (isnan(speed_encoder_val)) {
+        speed_encoder_val = 0;
+      }
+
+      float time_encoder_val = id(time_encoder).state;
+      if (isnan(time_encoder_val)) {
+        time_encoder_val = 0;
+      }
+      
+      bool text_hidden_cycle = id(text_blink);
+
+      bool show_motor_rpm_sp = true;
+      bool show_timer_sp = true;
+
+      if (!id(motor_state).state && text_hidden_cycle) {
+        show_motor_rpm_sp = false;
+      }
+      if (!id(timer_state).state && text_hidden_cycle) {
+        show_timer_sp = false;
+      }
+
+      int text_row_y = 4;
+      int first_row_number_y = 20;
+      int second_row_number_y = 42;
+
+      it.printf(14, text_row_y, id(text_small_font), "Temp.");
+      it.printf(100, text_row_y, id(text_small_font), "Speed");
+      it.printf(190, text_row_y, id(text_small_font), "Timer");
+
+      float material_temp = id(temp_material).state;
+      if (isnan(material_temp)) {
+        it.printf(10, first_row_number_y, id(text_font), "-- °C");
+      } else {
+        it.printf(10, first_row_number_y, id(text_font), "%.0f °C", material_temp);
+      }
+
+      if (show_motor_rpm_sp) {
+        it.printf(70, first_row_number_y, id(text_font), "%5d %%", int(speed_encoder_val));
+      } else {
+        it.printf(70, first_row_number_y, id(text_font_bold), "%5d %%", int(speed_encoder_val));
+      }
+      it.printf(70, second_row_number_y, id(text_font), "%5d RPM", int(id(speed_esp_rpm)));
+     
+
+      int time_encoder_s = time_encoder_val;
+      int encoder_seconds = time_encoder_s % 60;
+      int encoder_minutes = int((time_encoder_s - encoder_seconds) / 60);
+      if (show_timer_sp) {
+        it.printf(180, first_row_number_y, id(text_font), "%02d:%02d", encoder_minutes, encoder_seconds);
+      } else {
+        it.printf(180, first_row_number_y, id(text_font_bold), "%02d:%02d", encoder_minutes, encoder_seconds);
+      }
+
+      int timer_counter_s = id(timer_counter_ms) / 1000;
+      int timer_seconds = timer_counter_s % 60;
+      int timer_minutes = int((timer_counter_s - timer_seconds) / 60);
+
+      it.printf(180, second_row_number_y, id(text_font), "%02d:%02d", timer_minutes, timer_seconds);
+      

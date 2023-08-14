@@ -1,0 +1,53 @@
+substitutions:
+  device_name: "mixer-led-tester"
+  device_friendly_name: "Mixer controller"
+  mqqt_root_topic: "device"
+  mqqt_retain_message: "false"
+
+ota:
+  safe_mode: true
+  password: !secret ota_password
+
+esphome:
+  name: ${device_name}
+  friendly_name: ${device_friendly_name}
+
+esp32:
+  board: nodemcu-32s
+
+logger:
+  level: DEBUG
+  baud_rate: 9600
+  logs:
+    canbus: INFO
+
+wifi:
+  networks:
+  - ssid: !secret wifi_ssid_home
+    password: !secret wifi_password_home
+  - ssid: !secret wifi_ssid_makerspace
+    password: !secret wifi_password_makerspace
+
+captive_portal:
+
+mqtt:
+  broker: "192.168.0.218"
+  discovery_object_id_generator: device_name
+  topic_prefix: ${mqqt_root_topic}/${device_name}
+
+output:
+  - platform: gpio
+    pin: GPIO25
+    id: led
+switch:
+  - platform: output
+    name: "Generic Output"
+    output: led
+    id: led_sw
+
+interval:
+          
+  - interval: 500ms
+    then:
+      - lambda: |-
+          id(led_sw).toggle();

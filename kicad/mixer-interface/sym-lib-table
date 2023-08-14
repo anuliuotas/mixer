@@ -1,0 +1,5 @@
+(sym_lib_table
+  (version 7)
+  (lib (name "--local-espressif")(type "KiCad")(uri "${KIPRJMOD}/libs/symbols/--local-espressif.kicad_sym")(options "")(descr ""))
+  (lib (name "--local")(type "KiCad")(uri "${KIPRJMOD}/libs/symbols/--local.kicad_sym")(options "")(descr ""))
+)

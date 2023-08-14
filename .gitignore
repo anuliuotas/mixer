@@ -1,0 +1,7 @@
+esphome/.esphome
+esphome/secrets.yaml
+esphome/venv/*
+
+kicad/mixer-controller/mixer-controller-backups
+kicad/mixer-display-connector/mixer-display-connector-backups
+kicad/mixer-interface/mixer-interface-backups
