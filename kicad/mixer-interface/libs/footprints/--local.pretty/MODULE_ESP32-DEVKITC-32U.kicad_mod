@@ -111,6 +111,6 @@
   (pad "34" thru_hole roundrect (at 12.7 -12.69) (size 2.286 1.53) (drill 1.02) (layers "*.Cu" "*.Mask") (roundrect_rratio 0.25) (tstamp 4727dc01-4c83-4c01-a957-43f4fde56904))
   (pad "35" thru_hole roundrect (at 12.7 -15.23) (size 2.286 1.53) (drill 1.02) (layers "*.Cu" "*.Mask") (roundrect_rratio 0.25) (tstamp 78f5e0ac-026a-4b64-92c8-8738e6da7946))
   (pad "36" thru_hole roundrect (at 12.7 -17.77) (size 2.286 1.53) (drill 1.02) (layers "*.Cu" "*.Mask") (roundrect_rratio 0.25) (tstamp 7cec2ffe-3c55-42f1-a200-aced2b03bafc))
-  (pad "37" thru_hole circle (at 12.7 -20.31) (size 1.53 1.53) (drill 1.02) (layers "*.Cu" "*.Mask") (tstamp 03985255-cc44-4739-81c2-1dbada673551))
+  (pad "37" thru_hole roundrect (at 12.7 -20.31) (size 2.286 1.53) (drill 1.02) (layers "*.Cu" "*.Mask") (roundrect_rratio 0.25) (tstamp 03985255-cc44-4739-81c2-1dbada673551))
   (pad "38" thru_hole roundrect (at 12.7 -22.85) (size 2.286 1.53) (drill 1.02) (layers "*.Cu" "*.Mask") (roundrect_rratio 0.25) (tstamp b4b61f98-1e75-4d80-8c7e-44850c91b435))
 )

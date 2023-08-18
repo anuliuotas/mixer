@@ -45,7 +45,7 @@
         "silk_text_thickness": 0.15,
         "silk_text_upright": false,
         "zones": {
-          "min_clearance": 0.5
+          "min_clearance": 1.0
         }
       },
       "diff_pair_dimensions": [
@@ -432,9 +432,9 @@
       "version": 3
     },
     "net_colors": {
-      "+12V": "rgb(255, 0, 223)",
       "+3.3V": "rgb(255, 202, 0)",
-      "+5V": "rgb(255, 4, 0)"
+      "+5V": "rgb(255, 4, 0)",
+      "unconnected-(U10-IO4-Pad26)": "rgb(255, 0, 223)"
     },
     "netclass_assignments": null,
     "netclass_patterns": []

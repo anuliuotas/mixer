@@ -174,7 +174,7 @@
       (effects (font (size 1.27 1.27)) (justify bottom) hide)
     )
     (symbol "ESP32-DEVKITC-32U_0_0"
-      (rectangle (start -15.24 -25.4) (end 15.24 25.4)
+      (rectangle (start -15.24 25.4) (end 15.24 -25.4)
         (stroke (width 0.254) (type default))
         (fill (type background))
       )

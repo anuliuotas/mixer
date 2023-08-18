@@ -2,4 +2,5 @@
   (version 7)
   (lib (name "--local-espressif")(type "KiCad")(uri "${KIPRJMOD}/libs/symbols/--local-espressif.kicad_sym")(options "")(descr ""))
   (lib (name "--local")(type "KiCad")(uri "${KIPRJMOD}/libs/symbols/--local.kicad_sym")(options "")(descr ""))
+  (lib (name "tzt_oled_312_ssd1322")(type "KiCad")(uri "/home/majo/projects/makerspace/mixer/kicad/mixer-display-connector/libs/symbols/tzt_oled_312_ssd1322.kicad_sym")(options "")(descr ""))
 )
