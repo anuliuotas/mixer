@@ -1,7 +1,7 @@
 substitutions:
-  device_name: "mixer-controller"
-  device_friendly_name: "Mixer controller"
-  mqqt_root_topic: "device"
+  device_name: "mixer"
+  friendly_name: "Mixer"
+  mqqt_root_topic: "testing"
   mqqt_retain_message: "false"
 
 # ota:
@@ -16,24 +16,24 @@ esp32:
   board: nodemcu-32s
 
 logger:
-  level: INFO
+  level: DEBUG
   baud_rate: 9600
   logs:
     canbus: INFO
 
-# wifi:
-#   networks:
-#   - ssid: !secret wifi_ssid_home
-#     password: !secret wifi_password_home
-#   - ssid: !secret wifi_ssid_makerspace
-#     password: !secret wifi_password_makerspace
+wifi:
+  networks:
+  - ssid: !secret wifi_ssid_home
+    password: !secret wifi_password_home
+  - ssid: !secret wifi_ssid_makerspace
+    password: !secret wifi_password_makerspace
 
 # captive_portal:
 
-# mqtt:
-#   broker: "192.168.0.208"
-#   discovery_object_id_generator: device_name
-#   topic_prefix: ${mqqt_root_topic}/${device_name}
+mqtt:
+  broker: "broker.lan"
+  discovery_object_id_generator: device_name
+  topic_prefix: ${mqqt_root_topic}/${device_name}
 
 output:
   - platform: ledc
@@ -46,6 +46,11 @@ globals:
     type: long
     initial_value: '0'
     restore_value: no
+
+  - id: last_energy
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
 
 interval:      
   - interval: 200ms
@@ -66,25 +71,98 @@ interval:
 
           id(motor_pwm_out).set_level(setpoint_next / 100.0);
 
+          if (setpoint_next > 0) {
+            id(motor_fan_sw).turn_on();
+            // ESP_LOGI("Received VESC actual speed: ", "%i", 1);
+          } else {
+            id(motor_fan_sw).turn_off();
+            // ESP_LOGI("Received VESC actual speed: ", "%i", 0);
+          }
 
 sensor:
   - platform: template
     id: speed_esp_percent
+    name: "speed_esp_percent"
     unit_of_measurement: "%"
     force_update: true
+    internal: False
+    state_topic: ${mqqt_root_topic}/${device_name}/mcu/speed_percentage/get
   - platform: template
     id: temperature_material
+    name: "temperature_material"
     unit_of_measurement: "°C"
     force_update: true
+    internal: False
+    state_topic: ${mqqt_root_topic}/${device_name}/ds18b20_material/temperature/get
   - platform: template
     id: temperature_motor
+    name: "temperature_motor"
     unit_of_measurement: "°C"
     force_update: true
+    internal: False
+    state_topic: ${mqqt_root_topic}/${device_name}/ds18b20_motor/temperature/get
   - platform: template
     id: speed_vesc_rpm
+    name: "speed_vesc_rpm"
     unit_of_measurement: "RPM"
     force_update: true
+    internal: False
+    state_topic: ${mqqt_root_topic}/${device_name}/vesc/speed_motor/get
+  - platform: pzemac
+    current:
+      name: "current"
+      force_update: True
+      state_topic: ${mqqt_root_topic}/${device_name}/pzem_016/current/get
+    voltage:
+      name: "voltage"
+      force_update: True
+      state_topic: ${mqqt_root_topic}/${device_name}/pzem_016/voltage/get
+    energy:
+      name: "energy"
+      internal: True
+      force_update: True
+      on_value:
+        - lambda: !lambda |-
+            id(last_energy) = x;
+    power:
+      name: "power"
+      force_update: True
+      state_topic: ${mqqt_root_topic}/${device_name}/pzem_016/power/get
+    frequency:
+      name: "frequency"
+      force_update: True
+      state_topic: ${mqqt_root_topic}/${device_name}/pzem_016/frequency/get
+    power_factor:
+      name: "power_factor"
+      force_update: True
+      state_topic: ${mqqt_root_topic}/${device_name}/pzem_016/power_factor/get
+    update_interval: 5s
+  - platform: template
+    name: "energy"
+    id: energy_template
+    update_interval: 60s
+    force_update: True
+    lambda: !lambda |-
+      if (id(last_energy) > 0) { 
+        return (id(last_energy));
+      } else {
+        return {};
+      }  
+    state_topic: ${mqqt_root_topic}/${device_name}/pzem_016/energy/get
 
+switch:
+  - platform: gpio
+    id: motor_fan_sw
+    pin: GPIO26
+    internal: True
+
+
+uart:
+  rx_pin: GPIO19
+  tx_pin: GPIO18
+  baud_rate: 9600
+
+modbus:
 
 canbus:
   - platform: esp32_can
@@ -118,7 +196,7 @@ canbus:
           std::string b(x.begin(), x.end());
           float value = *reinterpret_cast<float*>(&x[0]);
 
-          ESP_LOGI("Received speed setpoint value: ", "%f", value);
+          // ESP_LOGI("Received speed setpoint value: ", "%f", value);
           id(speed_esp_percent).publish_state(value);
           id(last_speed_sp_update_ms) = millis();
     - can_id: 10
