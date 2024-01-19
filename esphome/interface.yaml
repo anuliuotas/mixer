@@ -303,7 +303,12 @@ display:
       } else {
         it.printf(70, first_row_number_y, id(text_font_bold), "%5d %%", int(speed_encoder_val));
       }
-      it.printf(70, second_row_number_y, id(text_font), "%5d RPM", int(id(speed_esp_rpm)));
+
+      int speed_esp_mv = int(id(speed_esp_rpm));
+      if (speed_esp_mv < 0) {
+        speed_esp_mv = 0;
+      }
+      it.printf(70, second_row_number_y, id(text_font), "%5d RPM", speed_esp_mv);
      
 
       int time_encoder_s = time_encoder_val;
