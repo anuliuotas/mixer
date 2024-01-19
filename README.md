@@ -10,7 +10,6 @@ TODO:
 - MixerInterface: Loading splash screen
 
 ### CAD
-- FAN shroud should include cable management and have bigger gap from motor
 - Increase height of WAGO holder for more cable space
 
 ### Other
